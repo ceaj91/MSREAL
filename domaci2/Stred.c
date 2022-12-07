@@ -17,7 +17,7 @@ static struct class *my_class;
 static struct device *my_device;
 static struct cdev *my_cdev;
 
-int memory[BUFF_SIZE];
+char memory[BUFF_SIZE];
 int pos = 0;
 int endRead = 0;
 
@@ -97,19 +97,33 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 	if(!strcmp(func,"string")){
 		pos=0;
 		len = strlen(input_string);
-		strncpy(memory,input_string,len);	
+		strncpy(memory,input_string,len);
+		pos = len;	
+		memory[pos]='\0';
 		printk(KERN_INFO "Vrsi se funkcija string\n");
 		printk(KERN_INFO "Trenutna vrednost memorije: %s", memory);
 	}
 
 	if(!strcmp(func,"clear")){
+		pos =0;
 		printk(KERN_INFO "Vrsi se funkcija clear");
 	}
 	if(!strcmp(func,"shrink")){
 		printk(KERN_INFO "Vrsi se funkcija shrink");
 	}
 	if(!strcmp(func,"append")){
-		printk(KERN_INFO "Vrsi se funkcija append");
+		len = strlen(input_string);
+		if(pos+len < 100){
+			pos = pos+len;
+			strncat(memory, input_string,len);
+			memory[pos]='\0';
+			printk(KERN_INFO "Vrsi se funkcija append");
+			printk(KERN_INFO "Trenutna vrednost memorije: %s", memory);
+		}
+		else{
+			printk(KERN_INFO "Ne moze da se upise, overflow!\n");
+			
+		}
 	}
 	if(!strcmp(func,"truncate")){
 		printk(KERN_INFO "Vrsi se funkcija truncate");
