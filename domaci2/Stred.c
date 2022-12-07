@@ -77,8 +77,7 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 		return -EFAULT;
 	buff[length-1] = '\0';
 
-	printk(KERN_INFO "Ulaz: %s",buff);
-	ret = sscanf(buff,"%[^=] = %[^\t\n]", func, input_string );
+	ret = sscanf(buff,"%10[^= ]=%99[^\t\n=]", func, input_string );
 
 		printk(KERN_INFO "parametar 1 : %s \n",func);
 		printk(KERN_INFO "parametar 2 : %s \n",input_string);
@@ -89,6 +88,7 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 	else{
 		ret = sscanf(buff,"%s",func);
 		if(ret == 1){
+
 
 			printk(KERN_INFO "Fnkcija sa 1 parametra\n");
 		}
