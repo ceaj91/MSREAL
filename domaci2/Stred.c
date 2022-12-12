@@ -19,7 +19,6 @@ static struct class *my_class;
 static struct device *my_device;
 static struct cdev *my_cdev;
 DECLARE_WAIT_QUEUE_HEAD(writeQ);
-DECLARE_WAIT_QUEUE_HEAD(deleteQ);
 
 
 char memory[BUFF_SIZE];
@@ -46,13 +45,13 @@ struct file_operations my_fops =
 
 int stred_open(struct inode *pinode, struct file *pfile) 
 {
-		printk(KERN_INFO "Succesfully opened lifo\n");
+		printk(KERN_INFO "Succesfully opened stred\n");
 		return 0;
 }
 
 int stred_close(struct inode *pinode, struct file *pfile) 
 {
-		printk(KERN_INFO "Succesfully closed lifo\n");
+		printk(KERN_INFO "Succesfully closed stred\n");
 		return 0;
 }
 
@@ -76,10 +75,8 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 	char buff[BUFF_SIZE];
 	char input_string[BUFF_SIZE];
 	char func[8];	
-	int value;
 	int ret;
 	int len;
-
 
 	ret = copy_from_user(buff, buffer, length);
 	if(ret)
@@ -88,68 +85,89 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 
 	ret = sscanf(buff,"%10[^= ]=%99[^\t\n=]", func, input_string);
 
+//Dekodovanje funkcije ispod
 
-
-//kriticna sekcija je bilo koja od funkcija ispod... 
-
-	
-
+//FUNKCIJA STRING
 	if(!strcmp(func,"string")){
 		pos=0;
 		len = strlen(input_string);
-		strncpy(memory,input_string,len);
-		pos = len;	
-		memory[pos]='\0';
+		if(down_interruptible(&sem))
+			return -ERESTARTSYS;
+		if(len<100)
+			strncpy(memory,input_string,len);
+		else
+			printk(KERN_WARNING "Predugacak string\n");
+		memory[len]='\0';
 		printk(KERN_INFO "String function completed!\n");
+		up(&sem);
 	}
-
+//FUNCKIJA CLEAR - ne treba semafor ni blokiranje
 	if(!strcmp(func,"clear")){
 
+		if(down_interruptible(&sem))
+			return -ERESTARTSYS;
 		memory[0] = '\0';
 		printk(KERN_INFO "Clear function completed!\n");
 		wake_up_interruptible(&writeQ);
+		up(&sem);
 	}
-
+//FUNCKIJA SHRINK
 	if(!strcmp(func,"shrink")){
-		printk(KERN_INFO "Vrsi se funkcija shrink \n ");
-		if(memory[0] == ' '){
+		if(down_interruptible(&sem))
+			return -ERESTARTSYS;
+		if(memory[0] == ' '){ 
 			printk(KERN_INFO "Postoji space na pocetku \n");
-			skip_spaces(memory);
+			skip_spaces(memory); // ova funkcija ne radi. Uvek je ispunje uslov ispod i ne brise se whitespace sa pocetka
 		}
-		if(memory[strlen(memory)-1] = ' '){
+		if(memory[(strlen(memory)-1)] = ' '){
 			printk(KERN_INFO "Postoji space na kraju \n");
 			strim(memory);
 		}
-		if(memory[0] == ' '){
-			printk(KERN_INFO "idalje postoji razmak na pocetku \n");
-		}
-		if(memory[strlen(memory)-1]  == ' '){
-			printk(KERN_INFO "ipak postoji razmak na kraju \n");
-		}
-		wake_up_interruptible(&writeQ);
+		wake_up_interruptible(&writeQ); //mogu da se obrisu neki razmaci, sto moze osloboditi da se nesto upise.
+		up(&sem);
 	}
+//FUNKCIJA APPEND 
 	if(!strcmp(func,"append")){
 		len = strlen(input_string);
-		printk(KERN_INFO "Ako bi se upisao string, duzina bi bila: %d", len+strlen(memory));		
-		if(wait_event_interruptible(writeQ, strlen(memory)+len < 100)) {
+		if(down_interruptible(&sem))
 			return -ERESTARTSYS;
+		while(strlen(memory)+len >= 100){
+			up(&sem);
+			if(wait_event_interruptible(writeQ, strlen(memory)+len < 100)) {
+				return -ERESTARTSYS;
+			}
+			if(down_interruptible(&sem))
+				return -ERESTARTSYS;
 		}
+
 		if(strlen(memory)+len<100){		
 			strncat(memory, input_string,len);
 			printk(KERN_INFO "Append function completed!\n");		
 		}
-		wake_up_interruptible(&deleteQ);
+		up(&sem);
 
 	}
+//FUNKCIJA TRUNCAT- 'truncate' iz nekog razloga nece da radi pa sam samo obrisao poslednje slovo.
 	if(!strcmp(func,"truncat")){ 
-		int l = (int) simple_strtoul(input_string,NULL,10);
-		if(wait_event_interruptible(deleteQ,strlen(memory)-l>0))
+		if(down_interruptible(&sem))
 			return -ERESTARTSYS;
-		memmove(memory+strlen(memory)-l,"\0",1);
-		printk(KERN_INFO "Truncat function completed!\n");
-		wake_up_interruptible(&writeQ);
+		int l = (int) simple_strtoul(input_string,NULL,10);// l je integer, predstavlja broj karaktera koji zeli da se obrise
+		if(strlen(memory)-l<=0){
+			memmove(memory+strlen(memory)-l,"\0",1); //brisane l karaktera sa kraja
+			printk(KERN_INFO "Truncat function completed!\n");
+		}
+		else{
+			memory[0]='\0'; //ceo string se brise
+			printk(KERN_INFO "Trazili ste da obrisete vise elemenata nego sto je u nizu");
+		}
+
+		up(&sem);
+		wake_up_interruptible(&writeQ); //budi append
 	}
+//FUNKCIJA REMOVE
 	if(!strcmp(func,"remove")){
+		if(down_interruptible(&sem))
+			return -ERESTARTSYS;
 		char *substring_ptr = strstr(memory,input_string);
 			
 		if(substring_ptr){
@@ -158,9 +176,10 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 				substring_ptr = strstr(memory,input_string);
 			}
 			printk(KERN_INFO "Remove function completed!\n");
-			wake_up_interruptible(&writeQ);
+			wake_up_interruptible(&writeQ); //budi append 
 			
 		}
+		up(&sem);
 	}
 	return length;
 
