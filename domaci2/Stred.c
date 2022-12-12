@@ -65,10 +65,10 @@ ssize_t stred_read(struct file *pfile, char __user *buffer, size_t length, loff_
 ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset) 
 {
 	char buff[BUFF_SIZE];
+	char input_string[BUFF_SIZE];
+	char func[8];	
 	int value;
 	int ret;
-	char func[8];	
-	char input_string[BUFF_SIZE];
 	int len;
 
 
@@ -77,7 +77,7 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 		return -EFAULT;
 	buff[length-1] = '\0';
 
-	ret = sscanf(buff,"%10[^= ]=%99[^\t\n=]", func, input_string );
+	ret = sscanf(buff,"%10[^= ]=%99[^\t\n=]", func, input_string);
 
 		printk(KERN_INFO "parametar 1 : %s \n",func);
 		printk(KERN_INFO "parametar 2 : %s \n",input_string);
@@ -101,22 +101,35 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 		pos = len;	
 		memory[pos]='\0';
 		printk(KERN_INFO "Vrsi se funkcija string\n");
-		printk(KERN_INFO "Trenutna vrednost memorije: %s", memory);
+		printk(KERN_INFO "Trenutna vrednost memorije:%s", memory);
 	}
 
 	if(!strcmp(func,"clear")){
-		pos =0;
-		printk(KERN_INFO "Vrsi se funkcija clear");
+		memory[0] = '\0';
+		printk(KERN_INFO "Vrsi se funkcija clear\n");
 	}
 	if(!strcmp(func,"shrink")){
-		printk(KERN_INFO "Vrsi se funkcija shrink");
+		printk(KERN_INFO "Vrsi se funkcija shrink \n ");
+		printk(KERN_INFO "Trenutna vrednost memorije:pocetak%skraj", memory);
+		if(memory[0] == ' '){
+			printk(KERN_INFO "Postoji space na pocetku \n");
+			skip_spaces(memory);
+		}
+		if(memory[strlen(memory)-1] = ' '){
+			printk(KERN_INFO "Postoji space na kraju \n");
+			strim(memory);
+		}
+		if(memory[0] == ' '){
+			printk(KERN_INFO "ipak postoji razmak na pocetku \n");
+		}
+		if(memory[strlen(memory)-1]  == ' '){
+			printk(KERN_INFO "ipak postoji razmak na kraju \n");
+		}
 	}
 	if(!strcmp(func,"append")){
 		len = strlen(input_string);
-		if(pos+len < 100){
-			pos = pos+len;
+		if(strlen(memory)+len < 100){
 			strncat(memory, input_string,len);
-			memory[pos]='\0';
 			printk(KERN_INFO "Vrsi se funkcija append");
 			printk(KERN_INFO "Trenutna vrednost memorije: %s", memory);
 		}
@@ -125,11 +138,21 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 			
 		}
 	}
-	if(!strcmp(func,"truncate")){
-		printk(KERN_INFO "Vrsi se funkcija truncate");
+	if(!strcmp(func,"truncat")){ 
+		int l = (int) simple_strtoul(input_string,NULL,10);
+		memmove(memory+strlen(memory)-l,"\0",1);
+		printk(KERN_INFO "Vrsi se funkcija truncate, obrisano poslednjih 5 elemenata:%s\n",memory);
 	}
 	if(!strcmp(func,"remove")){
 		printk(KERN_INFO "Vrsi se funkcija remove");
+		char *substring_ptr = strstr(memory,input_string);
+		if(substring_ptr){
+			memmove(substring_ptr, substring_ptr + strlen(input_string),strlen(substring_ptr+strlen(input_string))+1);
+			printk(KERN_INFO "Memorija nakon obrisanog substringa%s\n",memory);
+		}
+		else{
+			printk(KERN_INFO "Takav substring ne postoji\n");
+		}
 	}
 	return length;
 
