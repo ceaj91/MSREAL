@@ -52,13 +52,14 @@ ssize_t stred_read(struct file *pfile, char __user *buffer, size_t length, loff_
 {
 	int ret;
 	char buff[BUFF_SIZE];
-	long int len = 0;
+	long int len = 1;
 	if (endRead){
 		endRead = 0;
 		return 0;
 	}
-	//len = scnprintf(buff, BUFF_SIZE, "%d ", lifo[pos]);
-	//ret = copy_to_user(buffer, buff, len);
+	len = scnprintf(buff, BUFF_SIZE, "%s", memory);
+	ret = copy_to_user(buffer, buff, len);
+	endRead=1;
 	return len;
 }
 
@@ -79,21 +80,6 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 
 	ret = sscanf(buff,"%10[^= ]=%99[^\t\n=]", func, input_string);
 
-		printk(KERN_INFO "parametar 1 : %s \n",func);
-		printk(KERN_INFO "parametar 2 : %s \n",input_string);
-	if(ret == 2){
-		
-		printk(KERN_INFO "Fnkcija sa 2 parametra\n");
-	}
-	else{
-		ret = sscanf(buff,"%s",func);
-		if(ret == 1){
-
-
-			printk(KERN_INFO "Fnkcija sa 1 parametra\n");
-		}
-	}
-	
 	if(!strcmp(func,"string")){
 		pos=0;
 		len = strlen(input_string);
@@ -101,13 +87,13 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 		pos = len;	
 		memory[pos]='\0';
 		printk(KERN_INFO "Vrsi se funkcija string\n");
-		printk(KERN_INFO "Trenutna vrednost memorije:%s", memory);
 	}
 
 	if(!strcmp(func,"clear")){
 		memory[0] = '\0';
 		printk(KERN_INFO "Vrsi se funkcija clear\n");
 	}
+
 	if(!strcmp(func,"shrink")){
 		printk(KERN_INFO "Vrsi se funkcija shrink \n ");
 		printk(KERN_INFO "Trenutna vrednost memorije:pocetak%skraj", memory);
@@ -131,7 +117,6 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 		if(strlen(memory)+len < 100){
 			strncat(memory, input_string,len);
 			printk(KERN_INFO "Vrsi se funkcija append");
-			printk(KERN_INFO "Trenutna vrednost memorije: %s", memory);
 		}
 		else{
 			printk(KERN_INFO "Ne moze da se upise, overflow!\n");
@@ -141,14 +126,13 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 	if(!strcmp(func,"truncat")){ 
 		int l = (int) simple_strtoul(input_string,NULL,10);
 		memmove(memory+strlen(memory)-l,"\0",1);
-		printk(KERN_INFO "Vrsi se funkcija truncate, obrisano poslednjih 5 elemenata:%s\n",memory);
+		printk(KERN_INFO "Vrsi se funkcija truncate\n");
 	}
 	if(!strcmp(func,"remove")){
 		printk(KERN_INFO "Vrsi se funkcija remove");
 		char *substring_ptr = strstr(memory,input_string);
 		if(substring_ptr){
 			memmove(substring_ptr, substring_ptr + strlen(input_string),strlen(substring_ptr+strlen(input_string))+1);
-			printk(KERN_INFO "Memorija nakon obrisanog substringa%s\n",memory);
 		}
 		else{
 			printk(KERN_INFO "Takav substring ne postoji\n");
