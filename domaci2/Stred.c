@@ -1,4 +1,5 @@
 #include <linux/kernel.h>
+#include <linux/wait.h>
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -16,6 +17,9 @@ dev_t my_dev_id;
 static struct class *my_class;
 static struct device *my_device;
 static struct cdev *my_cdev;
+DECLARE_WAIT_QUEUE_HEAD(writeQ);
+
+
 
 char memory[BUFF_SIZE];
 int pos = 0;
@@ -92,6 +96,7 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 	if(!strcmp(func,"clear")){
 		memory[0] = '\0';
 		printk(KERN_INFO "Vrsi se funkcija clear\n");
+		wake_up_interruptible(&writeQ);
 	}
 
 	if(!strcmp(func,"shrink")){
@@ -111,37 +116,42 @@ ssize_t stred_write(struct file *pfile, const char __user *buffer, size_t length
 		if(memory[strlen(memory)-1]  == ' '){
 			printk(KERN_INFO "ipak postoji razmak na kraju \n");
 		}
+		wake_up_interruptible(&writeQ);
 	}
 	if(!strcmp(func,"append")){
+		printk(KERN_INFO "Vrsi se funkcija append");		
 		len = strlen(input_string);
-		if(strlen(memory)+len < 100){
+		printk(KERN_INFO "Ako bi se upisao string, duzina bi bila: %d", len+strlen(memory));		
+		if(wait_event_interruptible(writeQ, strlen(memory)+len < 100)) {
+			return -ERESTARTSYS;
+		}
+		if(strlen(memory)+len<100){		
 			strncat(memory, input_string,len);
-			printk(KERN_INFO "Vrsi se funkcija append");
 		}
-		else{
-			printk(KERN_INFO "Ne moze da se upise, overflow!\n");
-			
-		}
+
 	}
 	if(!strcmp(func,"truncat")){ 
 		int l = (int) simple_strtoul(input_string,NULL,10);
 		memmove(memory+strlen(memory)-l,"\0",1);
 		printk(KERN_INFO "Vrsi se funkcija truncate\n");
+		wake_up_interruptible(&writeQ);
 	}
 	if(!strcmp(func,"remove")){
 		printk(KERN_INFO "Vrsi se funkcija remove");
 		char *substring_ptr = strstr(memory,input_string);
+			
 		if(substring_ptr){
-			memmove(substring_ptr, substring_ptr + strlen(input_string),strlen(substring_ptr+strlen(input_string))+1);
-		}
-		else{
-			printk(KERN_INFO "Takav substring ne postoji\n");
+			while(substring_ptr){
+				memmove(substring_ptr, substring_ptr + strlen(input_string),strlen(substring_ptr+strlen(input_string))+1);
+				substring_ptr = strstr(memory,input_string);
+			}
+			wake_up_interruptible(&writeQ);
+			
 		}
 	}
 	return length;
 
 }
-
 static int __init stred_init(void)
 {
    int ret = 0;
